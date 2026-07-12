@@ -1,0 +1,109 @@
+from aiogram import Router, types, F
+from aiogram.filters import Command
+from ..config import ADMIN_IDS, DB_PATH
+import aiosqlite, asyncio, time
+from datetime import datetime
+
+router = Router()
+router.message.filter(F.from_user.id.in_(ADMIN_IDS))
+
+def admin_kb():
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="📊 Statistika", callback_data="adm_stat"), types.InlineKeyboardButton(text="👥 Top 10", callback_data="adm_top")],
+        [types.InlineKeyboardButton(text="📢 Broadcast", callback_data="adm_bc"), types.InlineKeyboardButton(text="💰 Iqtisod", callback_data="adm_econ")],
+        [types.InlineKeyboardButton(text="🔨 Ban", callback_data="adm_ban"), types.InlineKeyboardButton(text="🔓 Unban", callback_data="adm_unban")],
+        [types.InlineKeyboardButton(text="🎁 Gold", callback_data="adm_gift"), types.InlineKeyboardButton(text="💎 Diamond", callback_data="adm_diamond")],
+        [types.InlineKeyboardButton(text="⬆️ Level", callback_data="adm_level"), types.InlineKeyboardButton(text="📜 Loglar", callback_data="adm_logs")],
+    ])
+
+@router.message(Command("admin"))
+async def admin_panel(m: types.Message):
+    await m.answer(
+        "👑 <b>MUKAMMAL ADMIN PANEL</b>\n\n"
+        "Buyruqlar:\n"
+        "/ban 123 - banlash\n"
+        "/unban 123 - unban\n"
+        "/gift 123 1000 - gold berish\n"
+        "/diamond 123 50 - diamond\n"
+        "/setlevel 123 10 - level\n"
+        "/setgold 123 5000 - gold o'rnatish\n"
+        "/check 123 - user tekshirish\n"
+        "/broadcast Salom! - hammaga xabar\n"
+        "/stats - statistika",
+        reply_markup=admin_kb(), parse_mode="HTML"
+    )
+
+@router.callback_query(F.data=="adm_stat")
+async def cb_stat(c: types.CallbackQuery):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT COUNT(*), SUM(gold), AVG(level), SUM(CASE WHEN is_banned=1 THEN 1 ELSE 0 END) FROM users") as cur:
+            cnt, gold, avg, banned = await cur.fetchone()
+        async with db.execute("SELECT COUNT(*) FROM users WHERE last_hunt > ?", (int(time.time())-86400,)) as cur:
+            active = (await cur.fetchone())[0]
+    await c.message.edit_text(f"📊 STATISTIKA\nJami: {cnt}\n24h aktiv: {active}\nGold: {gold}\nAvg lvl: {round(avg or 0,1)}\nBan: {banned}", reply_markup=admin_kb())
+
+@router.message(Command("ban"))
+async def ban_cmd(m: types.Message):
+    try:
+        uid=int(m.text.split()[1])
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE users SET is_banned=1 WHERE user_id=?", (uid,)); await db.commit()
+        await m.answer(f"🔨 {uid} banlandi")
+    except: await m.answer("/ban 123")
+
+@router.message(Command("unban"))
+async def unban_cmd(m: types.Message):
+    try:
+        uid=int(m.text.split()[1])
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE users SET is_banned=0 WHERE user_id=?", (uid,)); await db.commit()
+        await m.answer(f"🔓 {uid} unban")
+    except: await m.answer("/unban 123")
+
+@router.message(Command("gift","setgold"))
+async def gift_cmd(m: types.Message):
+    try:
+        parts=m.text.split()
+        uid=int(parts[1]); amt=int(parts[2])
+        async with aiosqlite.connect(DB_PATH) as db:
+            if m.text.startswith("/setgold"):
+                await db.execute("UPDATE users SET gold=? WHERE user_id=?", (amt, uid))
+            else:
+                await db.execute("UPDATE users SET gold=gold+? WHERE user_id=?", (amt, uid))
+            await db.commit()
+        await m.answer(f"✅ {uid} ga {amt} gold")
+    except: await m.answer("/gift 123 1000")
+
+@router.message(Command("check"))
+async def check_cmd(m: types.Message):
+    try:
+        uid=int(m.text.split()[1])
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM users WHERE user_id=?", (uid,)) as cur:
+                u=await cur.fetchone()
+        if not u: return await m.answer("Topilmadi")
+        await m.answer(f"👤 {u['username']} ({u['user_id']})\nLvl {u['level']} | Gold {u['gold']} | HP {u['hp']}/{u['max_hp']}")
+    except: await m.answer("/check 123")
+
+@router.message(Command("broadcast"))
+async def broadcast_cmd(m: types.Message):
+    text=m.text.replace("/broadcast","").strip()
+    if not text: return await m.answer("/broadcast text")
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT user_id FROM users WHERE is_banned=0") as cur:
+            users=await cur.fetchall()
+    s=0
+    for (uid,) in users:
+        try:
+            await m.bot.send_message(uid, f"📢 ADMIN: {text}")
+            s+=1; await asyncio.sleep(0.04)
+        except: pass
+    await m.answer(f"{s} ta yuborildi")
+
+@router.message(Command("stats"))
+async def stats_cmd(m: types.Message):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT COUNT(*) FROM users") as cur:
+            c=(await cur.fetchone())[0]
+    await m.answer(f"Users: {c}")

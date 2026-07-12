@@ -1,0 +1,10 @@
+MONSTERS = [
+    {"name":"Bo'ri","hp":35,"atk":8,"gold":(10,25),"xp":18,"emoji":"🐺"},
+    {"name":"Goblin","hp":55,"atk":13,"gold":(20,40),"xp":30,"emoji":"👺"},
+    {"name":"Qaroqchi","hp":85,"atk":19,"gold":(35,70),"xp":55,"emoji":"🥷"},
+    {"name":"Ork","hp":120,"atk":26,"gold":(60,110),"xp":85,"emoji":"👹"},
+    {"name":"Ajdar Bolasi","hp":200,"atk":38,"gold":(120,250),"xp":150,"emoji":"🐲"},
+]
+SHOP_WEAPONS = {"Tayoq":{"price":0,"atk":0},"Temir Qilich":{"price":180,"atk":12},"Jang Bolta":{"price":420,"atk":28},"Afsona Tig'i":{"price":2500,"atk":120}}
+SHOP_ARMORS = {"Latta":{"price":0,"def":0},"Charm Zirh":{"price":150,"def":8},"Temir Sovut":{"price":380,"def":20}}
+BOSS = {"name":"Qora Ajdarho","hp":800,"atk":55,"gold":800,"xp":500,"emoji":"🐉"}

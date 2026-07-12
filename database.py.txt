@@ -1,0 +1,28 @@
+import aiosqlite, time
+from .config import DB_PATH
+async def init_db():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.executescript('''
+        CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, level INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, gold INTEGER DEFAULT 150, hp INTEGER DEFAULT 100, max_hp INTEGER DEFAULT 100, attack INTEGER DEFAULT 12, defense INTEGER DEFAULT 5, weapon TEXT DEFAULT 'Tayoq', armor TEXT DEFAULT 'Latta', wins INTEGER DEFAULT 0, loses INTEGER DEFAULT 0, is_banned INTEGER DEFAULT 0, last_hunt INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, ts INTEGER);
+        ''')
+        await db.commit()
+async def get_user(uid):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE user_id=?", (uid,)) as cur:
+            return await cur.fetchone()
+async def create_user(uid, username):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO users (user_id, username) VALUES (?,?)", (uid, username))
+        await db.commit()
+async def update_user(uid, **kv):
+    async with aiosqlite.connect(DB_PATH) as db:
+        for k,v in kv.items():
+            await db.execute(f"UPDATE users SET {k}=? WHERE user_id=?", (v, uid))
+        await db.commit()
+async def top_users(limit=10):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE is_banned=0 ORDER BY level DESC, gold DESC LIMIT ?", (limit,)) as cur:
+            return await cur.fetchall()

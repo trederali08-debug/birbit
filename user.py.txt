@@ -1,0 +1,98 @@
+import random, time
+from aiogram import Router, types, F
+from aiogram.filters import Command
+from ..database import get_user, create_user, update_user, top_users
+from ..data.game_data import MONSTERS, SHOP_WEAPONS, SHOP_ARMORS, BOSS
+router = Router()
+def main_kb():
+    return types.ReplyKeyboardMarkup(keyboard=[ [types.KeyboardButton(text="⚔️ Ov"), types.KeyboardButton(text="👤 Profil")], [types.KeyboardButton(text="🛒 Do'kon"), types.KeyboardButton(text="🎒 Sumka")], [types.KeyboardButton(text="👹 Boss"), types.KeyboardButton(text="🏆 Top")], [types.KeyboardButton(text="❤️ Davolanish")] ], resize_keyboard=True)
+@router.message(Command("start"))
+async def start(m: types.Message):
+    await create_user(m.from_user.id, m.from_user.username or m.from_user.first_name)
+    await m.answer(f"🏰 Salom {m.from_user.first_name}! MMORPG ga xush kelibsan!", reply_markup=main_kb())
+@router.message(F.text=="👤 Profil")
+@router.message(Command("profile"))
+async def profile(m: types.Message):
+    u = await get_user(m.from_user.id)
+    if not u: return
+    if u["is_banned"]: return await m.answer("🚫 Banlangansiz")
+    await m.answer(f"👤 {u['username']}\nLvl {u['level']} ({u['xp']}/{u['level']*100})\n❤️ {u['hp']}/{u['max_hp']}\n💪 {u['attack']} Atk | 🛡️ {u['defense']} Def\n🗡️ {u['weapon']} | 🦺 {u['armor']}\n💰 {u['gold']}")
+@router.message(F.text=="⚔️ Ov")
+@router.message(Command("hunt"))
+async def hunt(m: types.Message):
+    u = await get_user(m.from_user.id)
+    if u["hp"]<=10: return await m.answer("HP kam! Davolan")
+    if int(time.time())-u["last_hunt"]<3: return await m.answer("3 soniya kut!")
+    mon = random.choice(MONSTERS)
+    win = random.random() < 0.7
+    if win:
+        gold = random.randint(*mon["gold"])
+        new_xp = u["xp"]+mon["xp"]
+        new_lvl = u["level"]
+        lvlup=False
+        if new_xp>=u["level"]*100:
+            new_xp-=u["level"]*100; new_lvl+=1; lvlup=True
+        await update_user(u["user_id"], gold=u["gold"]+gold, xp=new_xp, level=new_lvl, hp=max(1,u["hp"]-random.randint(5,15)), max_hp=u["max_hp"]+(20 if lvlup else 0), attack=u["attack"]+(4 if lvlup else 0), last_hunt=int(time.time()))
+        await m.answer(f"{mon['emoji']} {mon['name']} yengildi! +{gold} gold +{mon['xp']} XP" + ("\n🎉 LEVEL UP!" if lvlup else ""))
+    else:
+        await update_user(u["user_id"], hp=max(0,u["hp"]-20), loses=u["loses"]+1, last_hunt=int(time.time()))
+        await m.answer(f"{mon['emoji']} {mon['name']} yengdi! -20 HP")
+@router.message(F.text=="👹 Boss")
+@router.message(Command("boss"))
+async def boss(m: types.Message):
+    u = await get_user(m.from_user.id)
+    if u["level"]<4: return await m.answer("Boss uchun 4-lvl kerak")
+    if random.randint(1,100) < u["level"]*5+u["attack"]:
+        await update_user(u["user_id"], gold=u["gold"]+BOSS["gold"], xp=u["xp"]+BOSS["xp"])
+        await m.answer(f"🔥 {BOSS['name']} O'LDI! +{BOSS['gold']} gold")
+    else:
+        await update_user(u["user_id"], hp=u["hp"]//2)
+        await m.answer("Boss yengdi, HP yarmi qoldi")
+@router.message(F.text=="🛒 Do'kon")
+@router.message(Command("shop"))
+async def shop(m: types.Message):
+    txt="🛒 Do'kon:\n"
+    for n,d in SHOP_WEAPONS.items(): txt+=f"🗡️ {n} - {d['price']}g - /buy_{n.replace(' ','_')}\n"
+    for n,d in SHOP_ARMORS.items(): txt+=f"🦺 {n} - {d['price']}g - /abuy_{n.replace(' ','_')}\n"
+    await m.answer(txt)
+@router.message(F.text.startswith("/buy_"))
+async def buy(m: types.Message):
+    from ..database import get_user, update_user
+    from ..data.game_data import SHOP_WEAPONS
+    u = await get_user(m.from_user.id)
+    raw = m.text.replace("/buy_","").replace("_"," ")
+    if raw not in SHOP_WEAPONS: return
+    item = SHOP_WEAPONS[raw]
+    if u["gold"]<item["price"]: return await m.answer("Gold yetmaydi")
+    await update_user(u["user_id"], gold=u["gold"]-item["price"], attack=u["attack"]+item["atk"], weapon=raw)
+    await m.answer(f"{raw} olindi!")
+@router.message(F.text.startswith("/abuy_"))
+async def abuy(m: types.Message):
+    from ..database import get_user, update_user
+    from ..data.game_data import SHOP_ARMORS
+    u = await get_user(m.from_user.id)
+    raw = m.text.replace("/abuy_","").replace("_"," ")
+    if raw not in SHOP_ARMORS: return
+    item = SHOP_ARMORS[raw]
+    if u["gold"]<item["price"]: return await m.answer("Gold yetmaydi")
+    await update_user(u["user_id"], gold=u["gold"]-item["price"], defense=u["defense"]+item["def"], armor=raw)
+    await m.answer(f"{raw} olindi!")
+@router.message(F.text=="❤️ Davolanish")
+@router.message(Command("heal"))
+async def heal(m: types.Message):
+    u = await get_user(m.from_user.id)
+    if u["gold"]<20: return await m.answer("20 gold kerak")
+    await update_user(u["user_id"], hp=u["max_hp"], gold=u["gold"]-20)
+    await m.answer("❤️ Davolanding!")
+@router.message(F.text=="🎒 Sumka")
+@router.message(Command("inventory"))
+async def inv(m: types.Message):
+    u = await get_user(m.from_user.id)
+    await m.answer(f"🎒 {u['weapon']} | {u['armor']} | {u['gold']}g")
+@router.message(F.text=="🏆 Top")
+@router.message(Command("top"))
+async def top(m: types.Message):
+    users = await top_users(10)
+    txt="🏆 Top 10:\n"
+    for i,us in enumerate(users,1): txt+=f"{i}. {us['username']} - {us['level']} lvl\n"
+    await m.answer(txt)

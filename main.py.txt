@@ -1,0 +1,22 @@
+import asyncio, logging
+from aiogram import Bot, Dispatcher
+from app.config import BOT_TOKEN
+from app.database import init_db
+from app.handlers import user, admin
+
+logging.basicConfig(level=logging.INFO)
+
+async def main():
+    if not BOT_TOKEN:
+        print("XATO: BOT_TOKEN topilmadi! .env tekshir")
+        return
+    await init_db()
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher()
+    dp.include_router(admin.router)
+    dp.include_router(user.router)
+    print("✅ Bot ishga tushdi")
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
